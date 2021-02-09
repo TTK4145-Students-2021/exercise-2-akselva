@@ -23,8 +23,8 @@ struct BoundedBuffer* buf_new(int size){
     
     pthread_mutex_init(&buf->mtx, NULL);
     // TODO: initialize semaphores
-    //sem_init(&buf->full,  0, /*starting value?*/);
-	//sem_init(&buf->empty, 0, /*starting value?*/);
+    sem_init(&buf->full,  0, 5);
+	sem_init(&buf->empty, 0, 5);
     
     return buf;    
 }
@@ -44,17 +44,26 @@ void buf_push(struct BoundedBuffer* buf, int val){
     // TODO: wait for there to be room in the buffer
     // TODO: make sure there is no concurrent access to the buffer internals
     
+    sem_wait(&buf->full);
+    pthread_mutex_lock(&buf->mtx);
     rb_push(buf->buf, val);
     
+    sem_post(&buf->empty);
     
-    // TODO: signal that there are new elements in the buffer    
+    // TODO: signal that there are new elements in the buffer
+    pthread_mutex_unlock(&buf->mtx);    
 }
 
 int buf_pop(struct BoundedBuffer* buf){
     // TODO: same, but different?
     
-    int val = rb_pop(buf->buf);    
-    
+    sem_wait(&buf->empty);
+    pthread_mutex_lock(&buf->mtx);
+    int val = rb_pop(buf->buf);
+    sem_post(&buf->full);
+
+        
+    pthread_mutex_unlock(&buf->mtx);
     return val;
 }
 
@@ -75,7 +84,6 @@ void* producer(void* args){
 
 void* consumer(void* args){
     struct BoundedBuffer* buf = (struct BoundedBuffer*)(args);
-    
     // give the producer a 1-second head start
     nanosleep(&(struct timespec){1, 0}, NULL);
     while(1){
